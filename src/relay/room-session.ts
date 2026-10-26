@@ -1,7 +1,32 @@
-import { SessionApi, type RelaySession } from "core";
+import { SessionApi, type RelaySession, type IdeaJs, type CommentJs } from "core";
 import type { IdentityRecord } from "../identity/identity-record";
 import { KnownRoomsStore, type KnownRoom } from "../rooms/known-rooms-store";
 import { inviteLinkToString, parseInviteLink, type InviteLink } from "../invite/invite-link";
+
+export interface Idea {
+  id: Int8Array;
+  createdBy: Int8Array;
+  title: string;
+  desc: string | null;
+  tags: string[];
+  score: number;
+  myVote: number | null;
+}
+
+export interface Comment {
+  id: Int8Array;
+  ideaId: Int8Array;
+  author: Int8Array;
+  text: string;
+}
+
+function toIdea(js: IdeaJs): Idea {
+  return { id: js.id, createdBy: js.createdBy, title: js.title, desc: js.desc ?? null, tags: js.tags, score: js.score, myVote: js.myVote ?? null };
+}
+
+function toComment(js: CommentJs): Comment {
+  return { id: js.id, ideaId: js.ideaId, author: js.author, text: js.text };
+}
 
 function toInt8Array(bytes: Uint8Array): Int8Array {
   // Same bits, read as signed instead of unsigned - a view reinterpretation, not a copy. The
@@ -114,6 +139,36 @@ export class RoomSessionOrchestrator {
 
   async listKnownRooms(): Promise<KnownRoom[]> {
     return this.knownRooms.all();
+  }
+
+  /** Pulls [roomId] fresh, then returns its ideas sorted by score descending (highest first) -
+   * the Room screen's main list, matching {@link RelaySession.listIdeas}'s own ordering. */
+  async listIdeas(roomId: Int8Array): Promise<Idea[]> {
+    await this.session.pull(roomId);
+    const ideas = await this.session.listIdeas(roomId);
+    return ideas.map(toIdea);
+  }
+
+  async createIdea(roomId: Int8Array, title: string, desc: string | null): Promise<boolean> {
+    return this.session.createIdea(roomId, title, desc);
+  }
+
+  /** [value] is the caller's own vote - whatever scale the room's UI uses (e.g. -1/0/1); core
+   * just sums whatever values it's given (PROTOCOL.md §4.2), it doesn't constrain the range. */
+  async vote(roomId: Int8Array, ideaId: Int8Array, value: number): Promise<boolean> {
+    return this.session.vote(roomId, ideaId, value);
+  }
+
+  /** Pulls [roomId] fresh first - an idea detail screen's comments should reflect what everyone
+   * else has just posted, same reasoning as {@link listIdeas}. */
+  async listComments(roomId: Int8Array, ideaId: Int8Array): Promise<Comment[]> {
+    await this.session.pull(roomId);
+    const comments = await this.session.listComments(roomId, ideaId);
+    return comments.map(toComment);
+  }
+
+  async addComment(roomId: Int8Array, ideaId: Int8Array, text: string): Promise<boolean> {
+    return this.session.addComment(roomId, ideaId, text);
   }
 }
 

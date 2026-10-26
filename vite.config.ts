@@ -5,6 +5,18 @@ export default defineConfig({
   server: {
     port: 4173,
   },
+  build: {
+    rollupOptions: {
+      // ktor-client-js's WebSocket engine dynamically `import('ws')` as its Node fallback,
+      // guarded by a runtime `PlatformUtils.isBrowser` check (ktor-ktor-client-core.mjs) -
+      // `new WebSocket(...)` (browser-native) is always the branch actually taken here, but
+      // Rollup still needs to resolve the import *statically* to bundle it, and "ws" isn't
+      // installed (nor should it be - it's Node-only). Externalizing leaves the dynamic import
+      // as a literal `import('ws')` at runtime, which is fine: that branch is provably
+      // unreachable in a browser bundle.
+      external: ["ws"],
+    },
+  },
   resolve: {
     // `core` is a `file:` dependency, symlinked from node_modules/core into ../core/build/....
     // Without this, Vite/Rollup resolve bare imports inside core's own .mjs files relative to

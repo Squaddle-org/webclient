@@ -64,6 +64,34 @@ describe("RoomSessionOrchestrator against a real local relay", () => {
 
     const bobRefreshed = await bob.refreshKnownRooms();
     expect(bobRefreshed[0]!.displayName).toBe("Weekend Trip");
+
+    // Alice creates an idea; Bob pulls and sees it, then votes; Alice pulls and sees the vote
+    // reflected in the score; Bob comments; Alice sees the comment - both parties converge on
+    // the same materialized state via nothing but pull+replay (no WebSocket push yet - M5a's
+    // live-updates slice is a separate, later task).
+    expect(await alice.createIdea(roomId!, "Go camping", "Somewhere with a lake")).toBe(true);
+
+    const bobIdeas = await bob.listIdeas(roomId!);
+    expect(bobIdeas).toHaveLength(1);
+    expect(bobIdeas[0]!.title).toBe("Go camping");
+    expect(bobIdeas[0]!.score).toBe(0);
+    expect(bobIdeas[0]!.myVote).toBeNull();
+
+    const ideaId = bobIdeas[0]!.id;
+    expect(await bob.vote(roomId!, ideaId, 1)).toBe(true);
+
+    const aliceIdeas = await alice.listIdeas(roomId!);
+    expect(aliceIdeas[0]!.score).toBe(1);
+    expect(aliceIdeas[0]!.myVote).toBeNull(); // Alice hasn't voted on her own idea
+
+    expect(await alice.vote(roomId!, ideaId, 1)).toBe(true);
+    const bobIdeasAfterBothVotes = await bob.listIdeas(roomId!);
+    expect(bobIdeasAfterBothVotes[0]!.score).toBe(2);
+
+    expect(await bob.addComment(roomId!, ideaId, "I'm in!")).toBe(true);
+    const aliceComments = await alice.listComments(roomId!, ideaId);
+    expect(aliceComments).toHaveLength(1);
+    expect(aliceComments[0]!.text).toBe("I'm in!");
   });
 
   it("joinViaUrl returns null for an unparseable link, without touching the relay", async () => {
