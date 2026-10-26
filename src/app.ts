@@ -4,12 +4,13 @@ import { parseRoute, routeToPath, type Route } from "./router";
 import { IdentityStore } from "./identity/identity-store";
 import { IndexedDbKeystore } from "./storage/keystore";
 import { getRelayHost, setRelayHost } from "./storage/relay-host-pref";
-import { RoomSessionOrchestrator, type Idea, type Comment } from "./relay/room-session";
+import { RoomSessionOrchestrator, type Idea, type Comment, type Member, type LiveUpdatesSubscription } from "./relay/room-session";
 import type { KnownRoom } from "./rooms/known-rooms-store";
 import { parseInviteLink } from "./invite/invite-link";
 
 const identityStore = new IdentityStore(new IndexedDbKeystore());
 let orchestrator: RoomSessionOrchestrator | null = null;
+let liveSub: LiveUpdatesSubscription | null = null;
 
 function roomIdToB32(roomId: Int8Array): string {
   return EncodingApi.getInstance().base32Encode(roomId);
@@ -43,6 +44,11 @@ function currentRoute(): Route {
 export async function render(): Promise<void> {
   const container = document.getElementById("app");
   if (!container) return;
+
+  // Whatever the previous screen subscribed to (only the room view does), it's no longer the
+  // active screen - stop both the WebSocket and the local poll driving it.
+  liveSub?.close();
+  liveSub = null;
 
   if (!(await identityStore.hasIdentity())) {
     mount(container, renderOnboarding());
@@ -228,41 +234,68 @@ async function renderRoomView(session: RoomSessionOrchestrator, roomIdB32: strin
 
   const titleInput = h("input", { type: "text", placeholder: "Idea title" }) as HTMLInputElement;
   const descInput = h("input", { type: "text", placeholder: "Description (optional)" }) as HTMLInputElement;
+  const inviteUrlInput = h("input", { type: "text", readonly: "true" }) as HTMLInputElement;
 
-  const ideaRow = (idea: Idea): HTMLElement => {
-    const ideaIdB32 = EncodingApi.getInstance().base32Encode(idea.id);
-    return h("li", {}, [
-      h("a", { href: `/rooms/${roomIdB32}/ideas/${ideaIdB32}`, onclick: linkClick(() => navigate({ kind: "idea", roomIdB32, ideaIdB32 })) }, [
-        `${idea.title} `,
-      ]),
-      h("span", { class: "score" }, [`score: ${idea.score}`]),
+  // Rebuilds just this screen's own content (not the whole route) - reused by every mutation
+  // handler below and by the live-updates callback, so none of them re-subscribe (that would
+  // leak the previous WebSocket connection every time something changes).
+  const refresh = async () => {
+    const ideaRow = (idea: Idea): HTMLElement => {
+      const ideaIdB32 = EncodingApi.getInstance().base32Encode(idea.id);
+      return h("li", {}, [
+        h("a", { href: `/rooms/${roomIdB32}/ideas/${ideaIdB32}`, onclick: linkClick(() => navigate({ kind: "idea", roomIdB32, ideaIdB32 })) }, [
+          `${idea.title} `,
+        ]),
+        h("span", { class: "score" }, [`score: ${idea.score}`]),
+        h("button", {
+          onclick: async () => {
+            await session.vote(roomId, idea.id, (idea.myVote ?? 0) >= 1 ? 0 : 1);
+            await refresh();
+          },
+        }, [idea.myVote && idea.myVote >= 1 ? "Unvote" : "Upvote"]),
+      ]);
+    };
+    const memberRow = (member: Member): HTMLElement =>
+      h("li", {}, [`${EncodingApi.getInstance().base32Encode(member.userKey).slice(0, 12)}… (${member.role})`]);
+
+    const ideas = await session.listIdeas(roomId);
+    const members = await session.listMembers(roomId);
+    mount(
+      container,
+      h("a", { href: "/rooms", onclick: linkClick(() => navigate({ kind: "rooms" })) }, ["← Rooms"]),
+      h("h1", {}, ["Ideas"]),
+      h("ul", {}, ideas.map(ideaRow)),
+      h("h2", {}, ["New idea"]),
+      titleInput,
+      descInput,
       h("button", {
         onclick: async () => {
-          await session.vote(roomId, idea.id, (idea.myVote ?? 0) >= 1 ? 0 : 1);
-          mount(container, await renderRoomView(session, roomIdB32));
+          const title = titleInput.value.trim();
+          if (!title) return;
+          await session.createIdea(roomId, title, descInput.value.trim() || null);
+          await refresh();
         },
-      }, [idea.myVote && idea.myVote >= 1 ? "Unvote" : "Upvote"]),
-    ]);
+      }, ["Add idea"]),
+      h("h2", {}, ["Members"]),
+      h("ul", {}, members.map(memberRow)),
+      h("h2", {}, ["Invite someone"]),
+      h("button", {
+        onclick: async () => {
+          const invite = await session.createInvite(roomId, false, null, null);
+          if (invite) inviteUrlInput.value = invite.url;
+        },
+      }, ["Create invite link"]),
+      inviteUrlInput,
+    );
   };
 
-  const ideas = await session.listIdeas(roomId);
-  mount(
-    container,
-    h("a", { href: "/rooms", onclick: linkClick(() => navigate({ kind: "rooms" })) }, ["← Rooms"]),
-    h("h1", {}, ["Ideas"]),
-    h("ul", {}, ideas.map(ideaRow)),
-    h("h2", {}, ["New idea"]),
-    titleInput,
-    descInput,
-    h("button", {
-      onclick: async () => {
-        const title = titleInput.value.trim();
-        if (!title) return;
-        await session.createIdea(roomId, title, descInput.value.trim() || null);
-        mount(container, await renderRoomView(session, roomIdB32));
-      },
-    }, ["Add idea"]),
-  );
+  await refresh();
+  liveSub = session.connectLiveUpdates(roomId, () => {
+    // Guard against a push landing after the user has already navigated away but before this
+    // screen's own render() cleanup closed the subscription (a real, if narrow, race).
+    const route = currentRoute();
+    if (route.kind === "room" && route.roomIdB32 === roomIdB32) void refresh();
+  });
   return container;
 }
 
