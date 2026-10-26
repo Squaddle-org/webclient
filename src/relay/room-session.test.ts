@@ -92,6 +92,47 @@ describe("RoomSessionOrchestrator against a real local relay", () => {
     const aliceComments = await alice.listComments(roomId!, ideaId);
     expect(aliceComments).toHaveLength(1);
     expect(aliceComments[0]!.text).toBe("I'm in!");
+
+    const members = await alice.listMembers(roomId!);
+    expect(members.map((m) => m.role).sort()).toEqual(["member", "owner"]);
+  });
+
+  it("connectLiveUpdates fires onChanged when the other party pushes a new idea", async () => {
+    const wasmDir = join(dirname(fileURLToPath(import.meta.url)), "../../node_modules/sql.js/dist");
+    await StorageApi.getInstance().preloadSqlJsDriver((f: string) => join(wasmDir, f));
+
+    (globalThis as any).indexedDB = new IDBFactory();
+    const alice = await RoomSessionOrchestrator.open(await freshIdentity("Alice's Phone"), RELAY_HOST, false);
+    await alice.registerDevice();
+    const roomId = await alice.createRoom("Live Room");
+    expect(roomId).not.toBeNull();
+
+    const invite = await alice.createInvite(roomId!, false, null, null);
+    (globalThis as any).indexedDB = new IDBFactory();
+    const bob = await RoomSessionOrchestrator.open(await freshIdentity("Bob's Phone"), RELAY_HOST, false);
+    await bob.registerDevice();
+    await bob.joinViaUrl(invite!.url);
+
+    const changed = new Promise<void>((resolve) => {
+      const sub = alice.connectLiveUpdates(roomId!, () => {
+        sub.close();
+        resolve();
+      });
+    });
+    // connectLiveUpdates returns as soon as it *launches* the WebSocket connection, not once the
+    // subscribe message has actually landed server-side (same as a real UI mounting a room
+    // screen - it doesn't block on that either). A push that races ahead of the subscribe is
+    // harmless by relay's own design (ws.go: "a missed live wake-up is harmless, the client's
+    // regular poll still catches up") but would make this specific assertion flaky, so give the
+    // handshake+subscribe round trip a moment to land first.
+    await new Promise((resolve) => setTimeout(resolve, 300));
+
+    await bob.createIdea(roomId!, "Pushed via websocket", null);
+
+    await changed; // vitest's own test timeout bounds this - no manual timeout needed
+
+    const aliceIdeas = await alice.listIdeas(roomId!);
+    expect(aliceIdeas.map((i) => i.title)).toContain("Pushed via websocket");
   });
 
   it("joinViaUrl returns null for an unparseable link, without touching the relay", async () => {

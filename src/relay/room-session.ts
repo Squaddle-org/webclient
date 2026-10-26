@@ -1,4 +1,4 @@
-import { SessionApi, type RelaySession, type IdeaJs, type CommentJs } from "core";
+import { SessionApi, type RelaySession, type IdeaJs, type CommentJs, type MemberJs, type LiveUpdatesHandle } from "core";
 import type { IdentityRecord } from "../identity/identity-record";
 import { KnownRoomsStore, type KnownRoom } from "../rooms/known-rooms-store";
 import { inviteLinkToString, parseInviteLink, type InviteLink } from "../invite/invite-link";
@@ -20,12 +20,28 @@ export interface Comment {
   text: string;
 }
 
+/** [role] is `"owner" | "admin" | "member" | "pending"` - see {@link MemberJs}'s own doc comment. */
+export interface Member {
+  userKey: Int8Array;
+  role: string;
+}
+
+/** Wraps core's {@link LiveUpdatesHandle} purely so callers depend on this module's own type,
+ * not `core`'s directly, same reasoning as every other `toX` conversion here. */
+export interface LiveUpdatesSubscription {
+  close(): void;
+}
+
 function toIdea(js: IdeaJs): Idea {
   return { id: js.id, createdBy: js.createdBy, title: js.title, desc: js.desc ?? null, tags: js.tags, score: js.score, myVote: js.myVote ?? null };
 }
 
 function toComment(js: CommentJs): Comment {
   return { id: js.id, ideaId: js.ideaId, author: js.author, text: js.text };
+}
+
+function toMember(js: MemberJs): Member {
+  return { userKey: js.userKey, role: js.role };
 }
 
 function toInt8Array(bytes: Uint8Array): Int8Array {
@@ -169,6 +185,23 @@ export class RoomSessionOrchestrator {
 
   async addComment(roomId: Int8Array, ideaId: Int8Array, text: string): Promise<boolean> {
     return this.session.addComment(roomId, ideaId, text);
+  }
+
+  /** Pulls [roomId] fresh first, same reasoning as {@link listIdeas}. Read-only - no invite/kick/
+   * role-change actions in M5a's members screen. */
+  async listMembers(roomId: Int8Array): Promise<Member[]> {
+    await this.session.pull(roomId);
+    const members = await this.session.listMembers(roomId);
+    return members.map(toMember);
+  }
+
+  /** Subscribes to [roomId]'s live updates; [onChanged] fires whenever a server push actually
+   * lands new local data - call {@link LiveUpdatesSubscription.close} when the UI navigates
+   * away from the room. See {@link RelaySession.connectLiveUpdates}'s own doc comment for why
+   * this isn't a simple event-free `Promise`. */
+  connectLiveUpdates(roomId: Int8Array, onChanged: () => void): LiveUpdatesSubscription {
+    const handle: LiveUpdatesHandle = this.session.connectLiveUpdates(roomId, onChanged);
+    return { close: () => handle.close() };
   }
 }
 
