@@ -1,0 +1,56 @@
+name: ci
+on: [push, pull_request]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { path: webclient }
+
+      # core is still consumed as a `file:` dependency (ADR-0009) - sibling checkout, same
+      # convention as SQUADDLE_CORE_DIR in local dev (webclient/CLAUDE.md).
+      - uses: actions/checkout@v4
+        with: { repository: squaddle-org/core, path: core }
+
+      # The test suite (src/relay/*.test.ts) runs against a real relay, not a mock - same
+      # discipline as core's own EndToEndIntegrationTest.
+      - uses: actions/checkout@v4
+        with: { repository: squaddle-org/relay, path: relay }
+
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: "21" }
+
+      - name: Build core's js library
+        working-directory: core
+        run: ./gradlew jsBrowserProductionLibraryDistribution
+
+      - uses: actions/setup-go@v5
+        with: { go-version-file: relay/go.mod }
+
+      - name: Build and start the relay
+        working-directory: relay
+        run: |
+          go build -o /tmp/test-relay ./cmd/relay
+          /tmp/test-relay -db /tmp/test-relay.db -listen :18080 -metrics :19090 -limits none &
+          for i in $(seq 1 50); do curl -sf http://localhost:19090/healthz && exit 0; sleep 0.2; done
+          echo "relay did not become healthy" >&2
+          exit 1
+
+      - uses: actions/setup-node@v4
+        with: { node-version: "22" }
+
+      - name: Install dependencies
+        working-directory: webclient
+        run: npm install
+
+      - name: Typecheck
+        working-directory: webclient
+        run: npm run typecheck
+
+      - name: Build
+        working-directory: webclient
+        run: npm run build
+
+      - name: Test
+        working-directory: webclient
+        run: npm test

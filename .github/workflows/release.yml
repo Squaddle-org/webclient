@@ -1,0 +1,59 @@
+name: release
+on:
+  push:
+    branches: [main]
+    tags: ["v*.*.*"]
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { path: webclient }
+
+      # `core` is still consumed as a `file:` dependency (ADR-0009) - Dockerfile expects it as a
+      # sibling directory with its js library already built, same SQUADDLE_CORE_DIR convention
+      # as local dev and ci.yml.
+      - uses: actions/checkout@v4
+        with: { repository: squaddle-org/core, path: core }
+
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: "21" }
+
+      - name: Build core's js library
+        working-directory: core
+        run: ./gradlew jsBrowserProductionLibraryDistribution
+
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/squaddle-org/webclient
+          flavor: latest=false
+          tags: |
+            type=semver,pattern={{version}}
+            type=sha
+            type=raw,value=edge,enable={{is_default_branch}}
+
+      - uses: docker/build-push-action@v6
+        with:
+          # workspace root (both `core/` and `webclient/`), not `webclient/` alone - see
+          # webclient/Dockerfile's own doc comment.
+          context: .
+          file: webclient/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
