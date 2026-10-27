@@ -13,6 +13,9 @@ export default defineConfig({
     ],
   },
   test: {
+    // e2e/ is Playwright's own suite (`npm run e2e`), not vitest's - it imports `test`/`expect`
+    // from `@playwright/test`, which collides with vitest's own globals if collected here.
+    exclude: ["**/node_modules/**", "e2e/**"],
     setupFiles: ["./src/test-setup.ts"],
     // `core` lives in node_modules (via its `file:` dependency symlink) and is externalized from
     // Vite's transform pipeline by default, bypassing the alias above entirely. Inlining it

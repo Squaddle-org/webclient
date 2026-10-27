@@ -54,3 +54,16 @@ jobs:
       - name: Test
         working-directory: webclient
         run: npm test
+
+      - name: Stop the relay started for the vitest suite
+        run: pkill -f /tmp/test-relay || true
+
+      - name: Install Playwright browsers
+        working-directory: webclient
+        run: npx playwright install --with-deps chromium
+
+      # e2e/global-setup.ts builds and starts its own relay (port 18080) - the one above is
+      # vitest's and must not still be bound to that port.
+      - name: E2E
+        working-directory: webclient
+        run: npm run e2e
