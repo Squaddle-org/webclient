@@ -116,7 +116,7 @@ export async function renderRoomView(
     return h("li", { class: "card", "data-idea": ideaIdB32 }, [
       h("div", { class: "row", style: "justify-content:space-between;" }, [
         h("a", { class: "title-medium", href: `/rooms/${roomIdB32}/ideas/${ideaIdB32}`, onclick: linkClick(() => navigate({ kind: "idea", roomIdB32, ideaIdB32 })) }, [idea.title]),
-        h("span", { class: "label-medium" }, [String(idea.score)]),
+        h("span", { class: "pill", "aria-label": `score ${String(idea.score)}` }, [String(idea.score)]),
       ]),
       idea.desc ? h("p", { class: "body-medium" }, [idea.desc]) : null,
       h("div", { class: "row" }, [
