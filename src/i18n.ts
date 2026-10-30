@@ -32,6 +32,7 @@ const STRINGS: Record<string, Record<Lang, string>> = {
   tier_free: { en: "Free", de: "Kostenlos" },
   tier_boosted: { en: "Boosted", de: "Geboostet" },
   tier_unlimited: { en: "Unlimited", de: "Unbegrenzt" },
+  tier_custom: { en: "Custom", de: "Individuell" },
 
   notification_channel_idea: { en: "New ideas", de: "Neue Ideen" },
   notification_channel_comment: { en: "New comments", de: "Neue Kommentare" },
@@ -171,6 +172,7 @@ const STRINGS: Record<string, Record<Lang, string>> = {
   room_rsvp_yes: { en: "Yes (%1$d)", de: "Ja (%1$d)" },
   room_rsvp_maybe: { en: "Maybe (%1$d)", de: "Vielleicht (%1$d)" },
   room_rsvp_no: { en: "No (%1$d)", de: "Nein (%1$d)" },
+  room_score_label: { en: "Score: %1$d", de: "Punktzahl: %1$d" },
 
   settings_title: { en: "Settings", de: "Einstellungen" },
   settings_recovery_seed: { en: "Recovery seed", de: "Wiederherstellungs-Seed" },

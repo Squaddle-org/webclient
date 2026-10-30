@@ -2,6 +2,7 @@ import { SessionApi, type RelaySession, type IdeaJs, type CommentJs, type Member
 import type { IdentityRecord } from "../identity/identity-record";
 import { KnownRoomsStore, type KnownRoom } from "../rooms/known-rooms-store";
 import { inviteLinkToString, parseInviteLink, type InviteLink } from "../invite/invite-link";
+import { getDisplayName } from "../storage/display-name-pref";
 
 export interface Idea {
   id: Int8Array;
@@ -24,6 +25,7 @@ export interface Comment {
 export interface Member {
   userKey: Int8Array;
   role: string;
+  displayName: string | null;
 }
 
 /** Wraps core's {@link LiveUpdatesHandle} purely so callers depend on this module's own type,
@@ -69,7 +71,7 @@ function toComment(js: CommentJs): Comment {
 }
 
 function toMember(js: MemberJs): Member {
-  return { userKey: js.userKey, role: js.role };
+  return { userKey: js.userKey, role: js.role, displayName: js.displayName ?? null };
 }
 
 function toEvent(js: EventJs): Event {
@@ -139,13 +141,28 @@ export class RoomSessionOrchestrator {
   }
 
   /** Creates the room, then records it locally under [displayName] - a purely local name (not a
-   * protocol concept, PROTOCOL.md §4's genesis entry carries no name field). */
+   * protocol concept, PROTOCOL.md §4's genesis entry carries no name field). Best-effort applies
+   * whatever display name the user chose (see {@link setProfile}'s own callers) - mirrors
+   * android's `RealSyncGateway.applyStoredDisplayName`. */
   async createRoom(displayName: string): Promise<Int8Array | null> {
     const result = await this.session.createRoom();
     if (!result.ok || !result.roomId) return null;
     const now = Date.now();
     await this.knownRooms.upsert({ roomId: result.roomId, displayName, relayHost: this.relayHost, joinedAt: now, lastActivityAt: now });
+    await this.applyStoredDisplayName(result.roomId);
     return result.roomId;
+  }
+
+  /** Best-effort: never throws, never blocks the caller's own main action on failure (same
+   * reasoning as android's `RealSyncGateway.applyStoredDisplayName`'s own doc comment). */
+  private async applyStoredDisplayName(roomId: Int8Array): Promise<void> {
+    const name = getDisplayName();
+    if (!name) return;
+    try {
+      await this.session.setProfile(roomId, name, null);
+    } catch {
+      // Best-effort, see doc comment above.
+    }
   }
 
   /** [roomId] must already be in the known-rooms store (i.e. this device created or joined it) -
@@ -188,6 +205,10 @@ export class RoomSessionOrchestrator {
     const roomName = link.inviteSecret ? (await this.session.peekInviteRoomName(link.roomId, link.inviteId, link.inviteSecret)) ?? "Squaddle room" : "Squaddle room";
     const now = Date.now();
     await this.knownRooms.upsert({ roomId: link.roomId, displayName: roomName, relayHost: link.relayHost, joinedAt: now, lastActivityAt: now });
+    // A no-approval join can set its profile right away; an approval-required one has no epoch
+    // key yet (PENDING members hold no content-plane key at all, §3.3) - applyStoredDisplayName
+    // simply fails best-effort in that case, same as android's own joinViaLink.
+    await this.applyStoredDisplayName(link.roomId);
     return { roomId: link.roomId };
   }
 
@@ -308,6 +329,12 @@ export class RoomSessionOrchestrator {
   async setProfile(roomId: Int8Array, displayName: string, emoji: string | null): Promise<boolean> {
     const result = await this.session.setProfile(roomId, displayName, emoji);
     return result.kind === "ok";
+  }
+
+  /** Settings screen's "save name" action - re-applies [displayName] to every known room
+   * (best-effort per room, same as {@link createRoom}/{@link joinViaLink}'s own call). */
+  async setDisplayNameEverywhere(displayName: string): Promise<void> {
+    for (const room of await this.knownRooms.all()) await this.setProfile(room.roomId, displayName, null);
   }
 
   async kick(roomId: Int8Array, target: Int8Array): Promise<boolean> {
