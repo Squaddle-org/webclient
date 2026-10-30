@@ -1,4 +1,4 @@
-import { SessionApi, type RelaySession, type IdeaJs, type CommentJs, type MemberJs, type LiveUpdatesHandle } from "core";
+import { SessionApi, type RelaySession, type IdeaJs, type CommentJs, type MemberJs, type EventJs, type RoomLimitsJs, type EntitlementResultJs, type LiveUpdatesHandle } from "core";
 import type { IdentityRecord } from "../identity/identity-record";
 import { KnownRoomsStore, type KnownRoom } from "../rooms/known-rooms-store";
 import { inviteLinkToString, parseInviteLink, type InviteLink } from "../invite/invite-link";
@@ -32,6 +32,34 @@ export interface LiveUpdatesSubscription {
   close(): void;
 }
 
+/** [start]/[end] are Unix seconds (see {@link EventJs}'s own doc comment - NOT milliseconds). */
+export interface Event {
+  id: Int8Array;
+  ideaId: Int8Array | null;
+  createdBy: Int8Array;
+  title: string;
+  start: number;
+  end: number | null;
+  tz: string;
+  location: string | null;
+  allDay: boolean;
+  canCancel: boolean;
+  myRsvp: string | null;
+  yesCount: number;
+  noCount: number;
+  maybeCount: number;
+}
+
+export interface RoomLimits {
+  tier: string;
+  maxMembers: number | null;
+  maxPending: number | null;
+  opRetentionDays: number | null;
+  attachmentBytes: number | null;
+  maxActiveInvites: number | null;
+  boostedUntil: number | null;
+}
+
 function toIdea(js: IdeaJs): Idea {
   return { id: js.id, createdBy: js.createdBy, title: js.title, desc: js.desc ?? null, tags: js.tags, score: js.score, myVote: js.myVote ?? null };
 }
@@ -42,6 +70,23 @@ function toComment(js: CommentJs): Comment {
 
 function toMember(js: MemberJs): Member {
   return { userKey: js.userKey, role: js.role };
+}
+
+function toEvent(js: EventJs): Event {
+  return {
+    id: js.id, ideaId: js.ideaId ?? null, createdBy: js.createdBy, title: js.title,
+    start: js.start, end: js.end ?? null, tz: js.tz, location: js.location ?? null, allDay: js.allDay,
+    canCancel: js.canCancel, myRsvp: js.myRsvp ?? null, yesCount: js.yesCount, noCount: js.noCount, maybeCount: js.maybeCount,
+  };
+}
+
+function toLimits(js: RoomLimitsJs): RoomLimits | null {
+  if (!js.ok || !js.tier) return null;
+  return {
+    tier: js.tier, maxMembers: js.maxMembers ?? null, maxPending: js.maxPending ?? null,
+    opRetentionDays: js.opRetentionDays ?? null, attachmentBytes: js.attachmentBytes ?? null,
+    maxActiveInvites: js.maxActiveInvites ?? null, boostedUntil: js.boostedUntil ?? null,
+  };
 }
 
 function toInt8Array(bytes: Uint8Array): Int8Array {
@@ -119,26 +164,38 @@ export class RoomSessionOrchestrator {
     return { link, url: inviteLinkToString(link) };
   }
 
-  /** `null` if [url] doesn't parse as an invite link. On success, joins and records the room
-   * locally - the display name is whatever the inviter sealed into the envelope ({@link
-   * RelaySession.peekInviteRoomName}), falling back to a generic placeholder if that's
-   * unavailable (approval-required invite, or the peek itself failed), same fallback android's
-   * `RealSyncGateway.joinViaLink` uses. */
+  /** `null` if [url] doesn't parse as an invite link. On success, joins (or, for an
+   * approval-required invite, sends a pending join request) and records the room locally. */
   async joinViaUrl(url: string): Promise<{ roomId: Int8Array } | null> {
     const link = parseInviteLink(url);
     if (!link) return null;
     return this.joinViaLink(link);
   }
 
+  /** `null` if the join request itself failed to send - **not** `null` for an approval-required
+   * invite that sent successfully (that's a normal, expected outcome: the room appears locally
+   * with this device showing as `"pending"` in {@link listMembers} until an owner/admin calls
+   * {@link approve}). The display name is whatever the inviter sealed into the envelope ({@link
+   * RelaySession.peekInviteRoomName}) for an open invite, or a generic placeholder for an
+   * approval-required one (no envelope exists for those at all, §3.5) - same fallback android's
+   * `RealSyncGateway.joinViaLink` uses either way. */
   async joinViaLink(link: InviteLink): Promise<{ roomId: Int8Array } | null> {
-    if (!link.inviteSecret) return null; // approval-required invites are out of M5a's scope (see RelaySession.joinViaLink's own doc comment)
-    const result = await this.session.joinViaLink(link.roomId, link.inviteId, link.inviteSecret);
+    const result = link.inviteSecret
+      ? await this.session.joinViaLink(link.roomId, link.inviteId, link.inviteSecret)
+      : await this.session.joinPendingApproval(link.roomId, link.inviteId);
     if (result.kind !== "ok") return null;
 
-    const roomName = (await this.session.peekInviteRoomName(link.roomId, link.inviteId, link.inviteSecret)) ?? "Squaddle room";
+    const roomName = link.inviteSecret ? (await this.session.peekInviteRoomName(link.roomId, link.inviteId, link.inviteSecret)) ?? "Squaddle room" : "Squaddle room";
     const now = Date.now();
     await this.knownRooms.upsert({ roomId: link.roomId, displayName: roomName, relayHost: link.relayHost, joinedAt: now, lastActivityAt: now });
     return { roomId: link.roomId };
+  }
+
+  /** Read-only preview before committing to join - `null` for an approval-required invite (no
+   * envelope exists to preview, §3.5) or if the peek itself fails. */
+  async peekInviteRoomName(link: InviteLink): Promise<string | null> {
+    if (!link.inviteSecret) return null;
+    return (await this.session.peekInviteRoomName(link.roomId, link.inviteId, link.inviteSecret)) ?? null;
   }
 
   /** Pulls every known room (log+ops) and returns the refreshed local registry, sorted
@@ -193,6 +250,109 @@ export class RoomSessionOrchestrator {
     await this.session.pull(roomId);
     const members = await this.session.listMembers(roomId);
     return members.map(toMember);
+  }
+
+  async editIdea(roomId: Int8Array, id: Int8Array, field: string, value: string | null): Promise<boolean> {
+    return this.session.editIdea(roomId, id, field, value);
+  }
+
+  async deleteIdea(roomId: Int8Array, id: Int8Array): Promise<boolean> {
+    return this.session.deleteIdea(roomId, id);
+  }
+
+  async deleteComment(roomId: Int8Array, id: Int8Array): Promise<boolean> {
+    return this.session.deleteComment(roomId, id);
+  }
+
+  /** `"owner" | "admin" | "member" | "pending"`, or `null` if somehow not a member at all. */
+  async myRole(roomId: Int8Array): Promise<string | null> {
+    return (await this.session.myRole(roomId)) ?? null;
+  }
+
+  async canCreateEvent(roomId: Int8Array): Promise<boolean> {
+    return this.session.canCreateEvent(roomId);
+  }
+
+  /** Pulls [roomId] fresh first, same reasoning as {@link listIdeas}. */
+  async listEvents(roomId: Int8Array): Promise<Event[]> {
+    await this.session.pull(roomId);
+    const events = await this.session.listEvents(roomId);
+    return events.map(toEvent);
+  }
+
+  async createEvent(
+    roomId: Int8Array,
+    ideaId: Int8Array | null,
+    title: string,
+    start: number,
+    end: number | null,
+    tz: string,
+    location: string | null,
+    allDay: boolean,
+  ): Promise<boolean> {
+    const result = await this.session.createEvent(roomId, ideaId, title, start, end, tz, location, allDay);
+    return result.kind === "ok";
+  }
+
+  async cancelEvent(roomId: Int8Array, id: Int8Array): Promise<boolean> {
+    const result = await this.session.cancelEvent(roomId, id);
+    return result.kind === "ok";
+  }
+
+  /** [value] is `"yes"`, `"no"`, or `"maybe"` (PROTOCOL.md §4.3). */
+  async rsvp(roomId: Int8Array, eventId: Int8Array, value: string): Promise<boolean> {
+    const result = await this.session.rsvp(roomId, eventId, value);
+    return result.kind === "ok";
+  }
+
+  async setProfile(roomId: Int8Array, displayName: string, emoji: string | null): Promise<boolean> {
+    const result = await this.session.setProfile(roomId, displayName, emoji);
+    return result.kind === "ok";
+  }
+
+  async kick(roomId: Int8Array, target: Int8Array): Promise<boolean> {
+    return (await this.session.kick(roomId, target)).kind === "ok";
+  }
+
+  /** [role] is `"admin"` or `"member"` (promote/demote - PROTOCOL.md §3.3). */
+  async setRole(roomId: Int8Array, target: Int8Array, role: string): Promise<boolean> {
+    return (await this.session.setRole(roomId, target, role)).kind === "ok";
+  }
+
+  async transferOwner(roomId: Int8Array, target: Int8Array): Promise<boolean> {
+    return (await this.session.transferOwner(roomId, target)).kind === "ok";
+  }
+
+  async approve(roomId: Int8Array, target: Int8Array): Promise<boolean> {
+    return (await this.session.approve(roomId, target)).kind === "ok";
+  }
+
+  async reject(roomId: Int8Array, target: Int8Array): Promise<boolean> {
+    return (await this.session.reject(roomId, target)).kind === "ok";
+  }
+
+  async getLimits(roomId: Int8Array): Promise<RoomLimits | null> {
+    return toLimits(await this.session.getLimits(roomId));
+  }
+
+  /** On success, returns the room's new tier - `null` on failure (bad code, already used, etc.),
+   * with [message] carrying the relay's own error text for display. */
+  async redeemVoucher(roomId: Int8Array, code: string): Promise<{ tier: string | null; message: string | null }> {
+    const result: EntitlementResultJs = await this.session.redeemVoucher(roomId, code);
+    return result.ok ? { tier: result.tier ?? null, message: null } : { tier: null, message: result.message || result.code };
+  }
+
+  /** `null` if push isn't configured on this relay, or it's unreachable. */
+  async vapidPublicKey(): Promise<string | null> {
+    return (await this.session.vapidPublicKey()) ?? null;
+  }
+
+  async registerPushEndpoint(endpoint: string): Promise<boolean> {
+    return (await this.session.registerPushEndpoint(endpoint)).kind === "ok";
+  }
+
+  async unregisterPush(): Promise<boolean> {
+    return (await this.session.unregisterPush()).kind === "ok";
   }
 
   /** Subscribes to [roomId]'s live updates; [onChanged] fires whenever a server push actually

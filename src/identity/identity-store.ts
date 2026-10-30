@@ -35,6 +35,13 @@ export class IdentityStore {
     return true;
   }
 
+  /** The backup-file restore path (PROTOCOL.md §7) - [entropy] is already decrypted (see
+   * {@link BackupContentJs.entropy} in settings/backup.ts), so there's no mnemonic to validate. */
+  async restoreFromEntropy(entropy: Int8Array, deviceLabel: string): Promise<void> {
+    const result = await IdentityApi.getInstance().restoreFromEntropy(entropy, deviceLabel);
+    await this.persist(result);
+  }
+
   async load(): Promise<IdentityRecord | null> {
     const seed = await this.keystore.loadSeed();
     return seed ? decodeIdentityRecord(seed) : null;
