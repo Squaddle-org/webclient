@@ -217,6 +217,24 @@ const STRINGS: Record<string, Record<Lang, string>> = {
   voucher_redeem: { en: "Redeem", de: "Einlösen" },
   voucher_error_title: { en: "Couldn't redeem voucher", de: "Gutschein konnte nicht eingelöst werden" },
   voucher_new_tier: { en: "This room is now tier: %1$s", de: "Dieser Raum ist jetzt Stufe: %1$s" },
+
+  // Device linking (PROTOCOL.md §2.3) - new on both platforms, no existing android copy to reuse.
+  onboarding_link_device: { en: "Link from another device", de: "Von einem anderen Gerät verknüpfen" },
+  link_title: { en: "Link this device", de: "Dieses Gerät verknüpfen" },
+  link_explainer: { en: "Scan this code with an already signed-in device (phone or browser) to use the same identity here - no recovery phrase needed.", de: "Scanne diesen Code mit einem bereits angemeldeten Gerät (Telefon oder Browser), um hier dieselbe Identität zu nutzen - keine Wiederherstellungsphrase nötig." },
+  link_waiting: { en: "Waiting for the other device to scan this code…", de: "Warte darauf, dass das andere Gerät diesen Code scannt…" },
+  link_expired: { en: "This code expired.", de: "Dieser Code ist abgelaufen." },
+  link_generate_new: { en: "Generate a new code", de: "Neuen Code erzeugen" },
+  link_failed_to_open: { en: "Couldn't complete linking - try again.", de: "Verknüpfung konnte nicht abgeschlossen werden - versuche es erneut." },
+  link_confirm_title: { en: "Confirm these codes match", de: "Bestätige, dass diese Codes übereinstimmen" },
+  link_confirm_explainer: { en: "Compare this code with the one shown on your other device. If they don't match, don't continue - start over.", de: "Vergleiche diesen Code mit dem auf deinem anderen Gerät angezeigten. Stimmen sie nicht überein, fahre nicht fort - beginne erneut." },
+  settings_link_device: { en: "Link a new device", de: "Neues Gerät verknüpfen" },
+  settings_link_device_explainer: { en: "Scan the QR code shown on a new device to sign it in with this identity.", de: "Scanne den auf einem neuen Gerät angezeigten QR-Code, um es mit dieser Identität anzumelden." },
+  link_scan_title: { en: "Scan the QR code", de: "QR-Code scannen" },
+  link_camera_unsupported: { en: "Camera access isn't supported in this browser.", de: "Kamerazugriff wird in diesem Browser nicht unterstützt." },
+  link_camera_denied: { en: "Camera permission was denied.", de: "Kamerazugriff wurde verweigert." },
+  link_sent_title: { en: "Device linked", de: "Gerät verknüpft" },
+  link_scan_another: { en: "Link another device", de: "Weiteres Gerät verknüpfen" },
 };
 
 const STORAGE_KEY = "squaddle.lang";

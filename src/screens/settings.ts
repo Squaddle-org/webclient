@@ -9,6 +9,9 @@ import { getDisplayName, setDisplayName } from "../storage/display-name-pref";
 import { getRelayHost, setRelayHost } from "../storage/relay-host-pref";
 import { KnownRoomsStore } from "../rooms/known-rooms-store";
 import type { RoomSessionOrchestrator } from "../relay/room-session";
+import { getMyUserKey } from "../session-context";
+import { confirmationCode, parseLinkQr, sealAndSendIdentity } from "../link/device-link";
+import { cameraSupported, startQrScan, type QrScanner } from "../link/qr-scan";
 
 /** [resetSession] mirrors `app.ts`'s own "force a fresh session against the new host" reset
  * (same as the relay-host field used to do inline in the rooms list before this screen existed). */
@@ -154,6 +157,65 @@ export async function renderSettings(session: RoomSessionOrchestrator, identityS
     h("button", { class: getLang() === "de" ? "" : "secondary", onclick: () => { setLang("de"); navigate({ kind: "settings" }); } }, ["DE"]),
   ]);
 
+  // Master (E) role of PROTOCOL.md §2.3 - scan a QR a new, not-yet-signed-in device (android
+  // or another webclient) is showing, and send this identity's entropy + known rooms to it.
+  const linkDeviceSection = h("div", {});
+  let activeScanner: QrScanner | null = null;
+  const renderLinkDeviceIdle = (): void => {
+    activeScanner?.stop();
+    activeScanner = null;
+    mount(
+      linkDeviceSection,
+      h("h2", {}, [t("settings_link_device")]),
+      h("p", { class: "body-medium" }, [t("settings_link_device_explainer")]),
+      cameraSupported()
+        ? h("button", { class: "secondary", onclick: () => void startScan() }, [t("settings_link_device")])
+        : h("p", { class: "error" }, [t("link_camera_unsupported")]),
+    );
+  };
+
+  const startScan = async (): Promise<void> => {
+    const video = h("video", { autoplay: "true", style: "width:100%;border-radius:var(--shape-medium);" }) as HTMLVideoElement;
+    const error = h("p", { class: "error" });
+    mount(
+      linkDeviceSection,
+      h("h2", {}, [t("link_scan_title")]),
+      video,
+      error,
+      h("button", { class: "text", onclick: renderLinkDeviceIdle }, [t("action_cancel")]),
+    );
+    try {
+      activeScanner = await startQrScan(video, (text) => void onQrDecoded(text));
+    } catch {
+      error.textContent = t("link_camera_denied");
+    }
+  };
+
+  const onQrDecoded = async (text: string): Promise<void> => {
+    activeScanner?.stop();
+    activeScanner = null;
+    const qr = parseLinkQr(text);
+    if (!qr || !identity) {
+      renderLinkDeviceIdle();
+      return;
+    }
+    const entropy = new Int8Array(identity.entropy.buffer as ArrayBuffer, identity.entropy.byteOffset, identity.entropy.byteLength);
+    const sent = await sealAndSendIdentity(qr, entropy, await session.listKnownRooms());
+    if (!sent) {
+      mount(linkDeviceSection, h("p", { class: "error" }, [t("link_failed_to_open")]), h("button", { class: "text", onclick: renderLinkDeviceIdle }, [t("action_back")]));
+      return;
+    }
+    const code = await confirmationCode(qr.ephemeralPublicKey, getMyUserKey());
+    mount(
+      linkDeviceSection,
+      h("h2", {}, [t("link_sent_title")]),
+      h("p", { class: "body-medium" }, [t("link_confirm_explainer")]),
+      h("p", { class: "display-small", style: "text-align:center;letter-spacing:4px;" }, [code]),
+      h("button", { class: "secondary", onclick: renderLinkDeviceIdle }, [t("link_scan_another")]),
+    );
+  };
+  renderLinkDeviceIdle();
+
   mount(
     container,
     h("a", { href: "/rooms", onclick: linkClick(() => navigate({ kind: "rooms" })) }, [`← ${t("rooms_title")}`]),
@@ -162,6 +224,7 @@ export async function renderSettings(session: RoomSessionOrchestrator, identityS
     profileSection,
     relaySection,
     pushSection,
+    linkDeviceSection,
     seedSection,
     backupSection,
   );

@@ -3,6 +3,9 @@ import { t } from "../i18n";
 import type { IdentityStore } from "../identity/identity-store";
 import { KnownRoomsStore } from "../rooms/known-rooms-store";
 import { restoreBackupFile } from "../settings/backup";
+import { getRelayHost } from "../storage/relay-host-pref";
+import { confirmationCode, generateLink, pollForLinkedIdentity } from "../link/device-link";
+import { renderLinkQr } from "../link/qr-display";
 
 /** Create/restore-from-seed/restore-from-backup-file, mirroring android's `OnboardingScreen.kt`
  * three entry points exactly. [onDone] is called once the identity is persisted and (for a
@@ -19,6 +22,7 @@ export function renderOnboarding(identityStore: IdentityStore, onDone: () => voi
       h("button", { onclick: () => showCreate() }, [t("onboarding_create_identity")]),
       h("button", { class: "secondary", onclick: () => showRestoreSeed() }, [t("onboarding_have_seed")]),
       h("button", { class: "secondary", onclick: () => showRestoreBackup() }, [t("onboarding_have_backup_file")]),
+      h("button", { class: "secondary", onclick: () => void showLinkDevice() }, [t("onboarding_link_device")]),
     );
   };
 
@@ -117,6 +121,68 @@ export function renderOnboarding(identityStore: IdentityStore, onDone: () => voi
       }, [t("action_continue")]),
       h("button", { class: "text", onclick: showChoice }, [t("action_back")]),
     );
+  };
+
+  const showLinkDevice = async (): Promise<void> => {
+    let cancelled = false;
+    const backToChoice = (): void => {
+      cancelled = true;
+      showChoice();
+    };
+
+    const generated = await generateLink(getRelayHost());
+    const qrCanvas = await renderLinkQr(generated.qr.uri);
+    const status = h("p", { class: "body-medium" }, [t("link_waiting")]);
+    mount(
+      container,
+      h("h2", {}, [t("link_title")]),
+      h("p", { class: "body-medium" }, [t("link_explainer")]),
+      qrCanvas,
+      status,
+      h("button", { class: "text", onclick: backToChoice }, [t("action_back")]),
+    );
+
+    const deadline = Date.now() + 5 * 60 * 1000; // mailbox TTL, relay/internal/api/link.go's linkMailboxTTL
+    const poll = async (): Promise<void> => {
+      if (cancelled) return;
+      if (Date.now() > deadline) {
+        status.textContent = t("link_expired");
+        mount(
+          container,
+          h("h2", {}, [t("link_title")]),
+          status,
+          h("button", { onclick: () => void showLinkDevice() }, [t("link_generate_new")]),
+          h("button", { class: "text", onclick: backToChoice }, [t("action_back")]),
+        );
+        return;
+      }
+      const identity = await pollForLinkedIdentity(generated.qr, generated.ephemeralSecretKey);
+      if (cancelled) return;
+      if (!identity) {
+        setTimeout(() => void poll(), 2000);
+        return;
+      }
+
+      const code = await confirmationCode(generated.qr.ephemeralPublicKey, identity.userKey);
+      await identityStore.restoreFromEntropy(identity.entropy, "My browser");
+      const knownRooms = new KnownRoomsStore();
+      const now = Date.now();
+      for (const room of identity.rooms) {
+        await knownRooms.upsert({
+          roomId: room.roomId, displayName: room.name ?? t("default_room_name"),
+          relayHost: room.relayHost, joinedAt: now, lastActivityAt: now,
+        });
+      }
+
+      mount(
+        container,
+        h("h2", {}, [t("link_confirm_title")]),
+        h("p", { class: "body-medium" }, [t("link_confirm_explainer")]),
+        h("p", { class: "display-small", style: "text-align:center;letter-spacing:4px;" }, [code]),
+        h("button", { onclick: onDone }, [t("action_continue")]),
+      );
+    };
+    void poll();
   };
 
   showChoice();
