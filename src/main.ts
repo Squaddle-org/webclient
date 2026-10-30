@@ -1,3 +1,4 @@
+import "./styles/tokens.css";
 import { StorageApi } from "core";
 // `?url` - Vite's asset-import convention: resolves to a build-stable URL for the file itself
 // (copied into the build output), rather than trying to parse/bundle `.wasm` as JS.

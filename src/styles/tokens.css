@@ -1,0 +1,277 @@
+/**
+ * Design tokens ported 1:1 from android's app/src/main/kotlin/org/squaddle/app/ui/theme/
+ * {Color,Type,Shape}.kt (the Phase H visual-design pass) so webclient and android feel like one
+ * product, not two. Values are the same hex/px numbers, not re-derived or eyeballed - see each
+ * section's own source-of-truth comment. `:root` is light; `prefers-color-scheme: dark` overrides
+ * the same names (no separate dark-mode class/toggle - android has no manual light/dark switch
+ * either, it follows the system theme the same way).
+ */
+
+@font-face {
+  font-family: "Fraunces";
+  src: url("/fonts/fraunces_semibold.ttf") format("truetype");
+  font-weight: 600;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Fraunces";
+  src: url("/fonts/fraunces_bold.ttf") format("truetype");
+  font-weight: 700;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Inter";
+  src: url("/fonts/inter_regular.ttf") format("truetype");
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Inter";
+  src: url("/fonts/inter_medium.ttf") format("truetype");
+  font-weight: 500;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Inter";
+  src: url("/fonts/inter_semibold.ttf") format("truetype");
+  font-weight: 600;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Inter";
+  src: url("/fonts/inter_bold.ttf") format("truetype");
+  font-weight: 700;
+  font-display: swap;
+}
+
+:root {
+  /* Color.kt's *Light roles - the brand coral/orange seed, hand-built M3 tonal roles. */
+  --color-primary: #ff5d3a;
+  --color-on-primary: #ffffff;
+  --color-primary-container: #ffdbcb;
+  --color-on-primary-container: #3a0b00;
+  --color-secondary: #77574b;
+  --color-on-secondary: #ffffff;
+  --color-secondary-container: #ffdbce;
+  --color-on-secondary-container: #2c160d;
+  --color-tertiary: #3d6373;
+  --color-on-tertiary: #ffffff;
+  --color-tertiary-container: #c0e9fb;
+  --color-on-tertiary-container: #001f29;
+  --color-error: #ba1a1a;
+  --color-on-error: #ffffff;
+  --color-error-container: #ffdad6;
+  --color-on-error-container: #410002;
+  --color-background: #fffbff;
+  --color-on-background: #201a17;
+  --color-surface: #fffbff;
+  --color-on-surface: #201a17;
+  --color-surface-variant: #f5ded6;
+  --color-on-surface-variant: #53433d;
+  --color-outline: #85736c;
+
+  /* Shape.kt's SquaddleShapes - rounder than M3's own defaults ("sticky-note" cut). */
+  --shape-extra-small: 8px;
+  --shape-small: 12px;
+  --shape-medium: 16px;
+  --shape-large: 20px;
+  --shape-extra-large: 28px;
+
+  /* Type.kt: M3's baseline scale, Fraunces for display/headline/title-large, Inter elsewhere. */
+  --font-display: "Fraunces", Georgia, serif;
+  --font-body: "Inter", system-ui, sans-serif;
+
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    /* Color.kt's *Dark roles. */
+    --color-primary: #ffb59d;
+    --color-on-primary: #5f1600;
+    --color-primary-container: #872300;
+    --color-on-primary-container: #ffdbcb;
+    --color-secondary: #e7bdb0;
+    --color-on-secondary: #432a1f;
+    --color-secondary-container: #5c4033;
+    --color-on-secondary-container: #ffdbce;
+    --color-tertiary: #a4cde0;
+    --color-on-tertiary: #063542;
+    --color-tertiary-container: #234c5a;
+    --color-on-tertiary-container: #c0e9fb;
+    --color-error: #ffb4ab;
+    --color-on-error: #690005;
+    --color-error-container: #93000a;
+    --color-on-error-container: #ffdad6;
+    --color-background: #181210;
+    --color-on-background: #ede0db;
+    --color-surface: #181210;
+    --color-on-surface: #ede0db;
+    --color-surface-variant: #53433d;
+    --color-on-surface-variant: #d8c2b9;
+    --color-outline: #9f8d86;
+
+    color-scheme: dark;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  background: var(--color-background);
+  color: var(--color-on-background);
+  font-family: var(--font-body);
+}
+
+body {
+  font-size: 16px;
+  line-height: 24px;
+  letter-spacing: 0.5px;
+  -webkit-font-smoothing: antialiased;
+}
+
+a {
+  color: var(--color-primary);
+}
+
+/* M3 type-scale utilities (font-family/weight/size/line-height/letter-spacing), named the same as
+ * android's Typography roles - .display-large through .label-small. Base elements below map onto
+ * the roles webclient's screens actually use; anything needing a different role gets the class
+ * directly. */
+.display-large,
+.display-medium,
+.display-small,
+.headline-large,
+.headline-medium,
+.headline-small,
+.title-large {
+  font-family: var(--font-display);
+}
+.title-medium,
+.title-small,
+.body-large,
+.body-medium,
+.body-small,
+.label-large,
+.label-medium,
+.label-small {
+  font-family: var(--font-body);
+}
+
+.display-large { font-size: 57px; line-height: 64px; letter-spacing: -0.25px; font-weight: 700; }
+.display-medium { font-size: 45px; line-height: 52px; font-weight: 700; }
+.display-small { font-size: 36px; line-height: 44px; font-weight: 600; }
+.headline-large { font-size: 32px; line-height: 40px; font-weight: 600; }
+.headline-medium { font-size: 28px; line-height: 36px; font-weight: 600; }
+.headline-small { font-size: 24px; line-height: 32px; font-weight: 600; }
+.title-large { font-size: 22px; line-height: 28px; font-weight: 600; }
+.title-medium { font-size: 16px; line-height: 24px; letter-spacing: 0.15px; font-weight: 600; }
+.title-small { font-size: 14px; line-height: 20px; letter-spacing: 0.1px; font-weight: 600; }
+.body-large { font-size: 16px; line-height: 24px; letter-spacing: 0.5px; font-weight: 400; }
+.body-medium { font-size: 14px; line-height: 20px; letter-spacing: 0.25px; font-weight: 400; }
+.body-small { font-size: 12px; line-height: 16px; letter-spacing: 0.4px; font-weight: 400; }
+.label-large { font-size: 14px; line-height: 20px; letter-spacing: 0.1px; font-weight: 500; }
+.label-medium { font-size: 12px; line-height: 16px; letter-spacing: 0.5px; font-weight: 500; }
+.label-small { font-size: 11px; line-height: 16px; letter-spacing: 0.5px; font-weight: 500; }
+
+h1 { margin: 24px 0 8px; font-family: var(--font-display); font-size: 32px; line-height: 40px; font-weight: 600; }
+h2 { margin: 20px 0 8px; font-family: var(--font-display); font-size: 24px; line-height: 32px; font-weight: 600; }
+h3 { margin: 16px 0 8px; font-family: var(--font-display); font-size: 22px; line-height: 28px; font-weight: 600; }
+p { margin: 8px 0; }
+
+button {
+  font-family: var(--font-body);
+  font-size: 14px;
+  line-height: 20px;
+  letter-spacing: 0.1px;
+  font-weight: 500;
+  border: none;
+  border-radius: var(--shape-extra-large);
+  padding: 10px 24px;
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+  cursor: pointer;
+}
+button:disabled {
+  opacity: 0.38;
+  cursor: default;
+}
+button.secondary {
+  background: var(--color-secondary-container);
+  color: var(--color-on-secondary-container);
+}
+button.text {
+  background: transparent;
+  color: var(--color-primary);
+  padding: 10px 12px;
+}
+button.destructive {
+  background: var(--color-error-container);
+  color: var(--color-on-error-container);
+}
+
+input,
+textarea,
+select {
+  font-family: var(--font-body);
+  font-size: 16px;
+  line-height: 24px;
+  border: 1px solid var(--color-outline);
+  border-radius: var(--shape-small);
+  padding: 10px 14px;
+  background: var(--color-surface);
+  color: var(--color-on-surface);
+}
+
+.error {
+  color: var(--color-error);
+  font-size: 14px;
+  line-height: 20px;
+  letter-spacing: 0.25px;
+}
+
+/* "Note" card - the sticky-note-board idea/room/event row the Phase H design pass introduced on
+ * android (idea/room cards get a visibly larger radius than everything else, per Shape.kt's own
+ * comment). */
+.card {
+  background: var(--color-surface-variant);
+  color: var(--color-on-surface-variant);
+  border-radius: var(--shape-large);
+  padding: 16px;
+  margin: 8px 0;
+}
+
+.screen {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 0 16px 32px;
+}
+
+ul.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  border-radius: var(--shape-extra-large);
+  background: var(--color-tertiary-container);
+  color: var(--color-on-tertiary-container);
+  font-size: 11px;
+  line-height: 16px;
+  letter-spacing: 0.5px;
+  font-weight: 500;
+  padding: 2px 10px;
+}
