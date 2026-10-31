@@ -43,6 +43,14 @@ async function bootstrap(): Promise<void> {
   });
 
   await render();
+  // A successful boot means this page load is done needing index.html's crypto-load-race retry
+  // guard - clearing it here (rather than leaving the counter to decay some other way) means a
+  // *later* transient failure, long after a clean load, still gets its own fresh retry budget.
+  try {
+    sessionStorage.removeItem("squaddle-crypto-load-retries");
+  } catch {
+    // Storage can throw (private browsing, blocked site data) - irrelevant to a successful boot.
+  }
 }
 
 void bootstrap();

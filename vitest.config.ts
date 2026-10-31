@@ -10,6 +10,11 @@ export default defineConfig({
         find: /^libsodium-sumo$/,
         replacement: fileURLToPath(new URL("./vite-shims/libsodium-sumo-shim.mjs", import.meta.url)),
       },
+      // See vite.config.ts's own copy of this alias for why.
+      {
+        find: /^libsodium-wrappers-sumo$/,
+        replacement: fileURLToPath(new URL("./vite-shims/libsodium-wrappers-sumo-shim.mjs", import.meta.url)),
+      },
     ],
   },
   test: {

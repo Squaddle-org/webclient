@@ -7,6 +7,39 @@
   </head>
   <body>
     <div id="app"></div>
+    <script>
+      // libsodium-wrappers-sumo's own WASM-init self-test (bundled, not Squaddle's code) can
+      // lose a race under CPU pressure and throw "Both wasm and asm failed to load" - confirmed
+      // via repeated throttled-CPU reproduction, and confirmed this happens during the module's
+      // own import-time evaluation, before any application code (incl. main.ts's own
+      // `await sodium.ready` gate) gets a chance to run - no amount of downstream awaiting can
+      // catch a throw that happens before the awaiting code exists yet. A reload is a real fix.
+      // not a workaround: the race is purely timing-dependent, so a second attempt overwhelmingly
+      // just succeeds. Capped and guarded via sessionStorage so a genuinely broken environment
+      // (not a transient race) fails visibly instead of reload-looping forever. This has to be a
+      // plain classic script, not type="module", so it installs before main.ts's own module graph
+      // (where the race actually lives) starts evaluating.
+      (function () {
+        var KEY = "squaddle-crypto-load-retries";
+        var MAX_RETRIES = 2;
+        function isCryptoLoadRace(message) {
+          return typeof message === "string" && message.indexOf("wasm and asm failed to load") !== -1;
+        }
+        function retry(message) {
+          if (!isCryptoLoadRace(message)) return;
+          var count = parseInt(sessionStorage.getItem(KEY) || "0", 10);
+          if (count >= MAX_RETRIES) return; // let it surface for real rather than loop forever
+          sessionStorage.setItem(KEY, String(count + 1));
+          location.reload();
+        }
+        window.addEventListener("error", function (ev) {
+          retry(ev.message || (ev.error && ev.error.message));
+        });
+        window.addEventListener("unhandledrejection", function (ev) {
+          retry(ev.reason && ev.reason.message);
+        });
+      })();
+    </script>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

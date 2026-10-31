@@ -16,9 +16,12 @@
     "core": "file:../core/build/dist/js/productionLibrary",
     "jsqr": "^1.4.0",
     "libsodium-sumo": "^0.7.16",
-    "libsodium-wrappers-sumo": "^0.7.13",
+    "libsodium-wrappers-sumo": "^0.8.4",
     "qrcode": "^1.5.4",
     "sql.js": "^1.15.2"
+  },
+  "overrides": {
+    "libsodium-wrappers-sumo": "^0.8.4"
   },
   "devDependencies": {
     "@playwright/test": "^1.56.0",

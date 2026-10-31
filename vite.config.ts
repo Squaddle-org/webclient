@@ -33,6 +33,15 @@ export default defineConfig({
         find: /^libsodium-sumo$/,
         replacement: fileURLToPath(new URL("./vite-shims/libsodium-sumo-shim.mjs", import.meta.url)),
       },
+      // Same reasoning, for libsodium-wrappers-sumo - see vite-shims/libsodium-wrappers-sumo-shim.mjs.
+      // Applies to every importer of the bare specifier, main.ts's own default import included -
+      // harmless there (the shim's own default export is still the real module), and actually
+      // stronger: the shim's top-level `await ready` means it's already ready by the time any
+      // importer's import resolves, not just by the time main.ts's own await completes.
+      {
+        find: /^libsodium-wrappers-sumo$/,
+        replacement: fileURLToPath(new URL("./vite-shims/libsodium-wrappers-sumo-shim.mjs", import.meta.url)),
+      },
     ],
   },
 });
