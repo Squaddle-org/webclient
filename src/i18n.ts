@@ -141,6 +141,7 @@ const STRINGS: Record<string, Record<Lang, string>> = {
   room_new_idea_title: { en: "New idea", de: "Neue Idee" },
   room_new_event: { en: "New event", de: "Neuer Termin" },
   room_new_event_title: { en: "New event", de: "Neuer Termin" },
+  room_rename_action: { en: "Rename room", de: "Raum umbenennen" },
   room_tab_ideas: { en: "Ideas", de: "Ideen" },
   room_tab_events: { en: "Events", de: "Termine" },
   room_no_ideas_title: { en: "No ideas yet", de: "Noch keine Ideen" },

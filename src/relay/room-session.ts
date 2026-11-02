@@ -52,6 +52,17 @@ export interface Event {
   maybeCount: number;
 }
 
+/** A room's display name was never a protocol concept until `room.set` (PROTOCOL.md §4.2/
+ * ADR-0014) - {@link RoomSessionOrchestrator.joinViaLink}/the android equivalent both use this
+ * as the locally-known name whenever the real one isn't available. {@link
+ * RoomSessionOrchestrator.createInvite} checks against this same constant before baking *this*
+ * client's locally-known name into a *new* invite's envelope - without that check, a room whose
+ * real name was never actually known here would propagate this placeholder onward as if it were
+ * real, permanently, to every future joiner. Matches android's `RealSyncGateway`'s own copy of
+ * this constant exactly (same literal string) - not required for correctness (each client only
+ * ever compares against its own copy), but avoids two implementations silently drifting. */
+const UNKNOWN_ROOM_NAME_PLACEHOLDER = "Squaddle room";
+
 export interface RoomLimits {
   tier: string;
   maxMembers: number | null;
@@ -150,6 +161,14 @@ export class RoomSessionOrchestrator {
     const now = Date.now();
     await this.knownRooms.upsert({ roomId: result.roomId, displayName, relayHost: this.relayHost, joinedAt: now, lastActivityAt: now });
     await this.applyStoredDisplayName(result.roomId);
+    // Best-effort, same posture/reasoning as applyStoredDisplayName above - gives the room a real
+    // synced name (PROTOCOL.md §4.2/ADR-0014) from the moment it's created, instead of the name
+    // only ever existing as this device's local known-rooms cache.
+    try {
+      await this.session.setRoomName(result.roomId, displayName);
+    } catch {
+      // Best-effort, see doc comment above.
+    }
     return result.roomId;
   }
 
@@ -174,8 +193,14 @@ export class RoomSessionOrchestrator {
     expiresAt: number | null,
     maxUses: number | null,
   ): Promise<{ link: InviteLink; url: string } | null> {
+    // The materialized, synced name (PROTOCOL.md §4.2/ADR-0014) is authoritative whenever it
+    // exists - prefer it over the local cache. Falling back to the cache (guarded against the
+    // placeholder - see UNKNOWN_ROOM_NAME_PLACEHOLDER's own doc comment) only covers a room
+    // created before room.set existed, which has no synced name yet.
+    const synced = await this.session.roomName(roomId);
     const known = (await this.knownRooms.all()).find((r) => bytesEqual(r.roomId, roomId));
-    const result = await this.session.createInvite(roomId, requiresApproval, expiresAt, maxUses, known?.displayName ?? null);
+    const cached = known?.displayName && known.displayName !== UNKNOWN_ROOM_NAME_PLACEHOLDER ? known.displayName : null;
+    const result = await this.session.createInvite(roomId, requiresApproval, expiresAt, maxUses, synced ?? cached);
     if (!result.ok || !result.inviteId) return null;
     const link: InviteLink = { relayHost: this.relayHost, roomId, inviteId: result.inviteId, inviteSecret: result.inviteSecret ?? null };
     return { link, url: inviteLinkToString(link) };
@@ -202,7 +227,9 @@ export class RoomSessionOrchestrator {
       : await this.session.joinPendingApproval(link.roomId, link.inviteId);
     if (result.kind !== "ok") return null;
 
-    const roomName = link.inviteSecret ? (await this.session.peekInviteRoomName(link.roomId, link.inviteId, link.inviteSecret)) ?? "Squaddle room" : "Squaddle room";
+    const roomName = link.inviteSecret
+      ? (await this.session.peekInviteRoomName(link.roomId, link.inviteId, link.inviteSecret)) ?? UNKNOWN_ROOM_NAME_PLACEHOLDER
+      : UNKNOWN_ROOM_NAME_PLACEHOLDER;
     const now = Date.now();
     await this.knownRooms.upsert({ roomId: link.roomId, displayName: roomName, relayHost: link.relayHost, joinedAt: now, lastActivityAt: now });
     // A no-approval join can set its profile right away; an approval-required one has no epoch
@@ -226,7 +253,18 @@ export class RoomSessionOrchestrator {
     const known = await this.knownRooms.all();
     for (const room of known) {
       const result = await this.session.pull(room.roomId);
-      if (result.ok) await this.knownRooms.touchActivity(room.roomId, Date.now());
+      if (!result.ok) continue;
+      await this.knownRooms.touchActivity(room.roomId, Date.now());
+      // Self-healing cache: the local known-rooms store is local bookkeeping for instant paint
+      // before a room's materialized state is available - once a real synced name exists
+      // (PROTOCOL.md §4.2/ADR-0014), it's authoritative and should overwrite the cache. This is
+      // what makes an already-wrong cached name (e.g. the placeholder-propagation bug
+      // UNKNOWN_ROOM_NAME_PLACEHOLDER's own doc comment describes) correct itself the next time
+      // anyone syncs, once the room's owner has set a real name.
+      const synced = await this.session.roomName(room.roomId);
+      if (synced && synced !== room.displayName) {
+        await this.knownRooms.upsert({ ...room, displayName: synced });
+      }
     }
     return this.knownRooms.all();
   }
@@ -329,6 +367,28 @@ export class RoomSessionOrchestrator {
   async setProfile(roomId: Int8Array, displayName: string, emoji: string | null): Promise<boolean> {
     const result = await this.session.setProfile(roomId, displayName, emoji);
     return result.kind === "ok";
+  }
+
+  /** `room.set` is "admin or owner" (PROTOCOL.md §4.2/ADR-0014) - unlike {@link setProfile}, no
+   * "own" concept at all, so a plain member's call here would be durably enqueued+pushed but
+   * silently ignored by every other client's fold. Callers must gate the UI action itself on
+   * {@link canRenameRoom}, same as every other admin-only action already does - this method
+   * doesn't check it for you. */
+  async setRoomName(roomId: Int8Array, name: string): Promise<boolean> {
+    const result = await this.session.setRoomName(roomId, name);
+    return result.kind === "ok";
+  }
+
+  /** The materialized, synced room name (PROTOCOL.md §4.2/ADR-0014) - `null` until some
+   * admin/owner has ever authored a `room.set` for this room (e.g. a room created before this op
+   * existed). Pulls [roomId] fresh first, same reasoning as {@link listIdeas}. */
+  async roomName(roomId: Int8Array): Promise<string | null> {
+    await this.session.pull(roomId);
+    return (await this.session.roomName(roomId)) ?? null;
+  }
+
+  async canRenameRoom(roomId: Int8Array): Promise<boolean> {
+    return this.session.canRenameRoom(roomId);
   }
 
   /** Settings screen's "save name" action - re-applies [displayName] to every known room

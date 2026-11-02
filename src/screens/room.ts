@@ -73,7 +73,37 @@ export async function renderRoomView(
     h("a", { href: "/rooms", onclick: linkClick(() => navigate({ kind: "rooms" })) }, [`← ${t("rooms_title")}`]),
     limits ? h("span", { class: "pill" }, [t(`tier_${limits.tier}`)]) : null,
   ]);
-  const title = h("h1", {}, [known?.displayName ?? t("default_room_name")]);
+  // The materialized, synced name (PROTOCOL.md §4.2/ADR-0014) is authoritative whenever it
+  // exists - prefer it over the local cache, same reasoning as RelaySession.createInvite's own
+  // lookup. session.roomName also pulls fresh first, so this doubles as the room-name half of
+  // this screen's own self-healing-cache sync pass.
+  const syncedRoomName = await session.roomName(roomId);
+  const titleText = syncedRoomName ?? known?.displayName ?? t("default_room_name");
+  const canRenameRoom = await session.canRenameRoom(roomId);
+  const titleTextEl = h("h1", {}, [titleText]);
+  const renameSection = h("div", { class: "rename-room-section" });
+  const renderRenameSection = (editing: boolean): void => {
+    if (!editing) {
+      mount(
+        renameSection,
+        canRenameRoom ? h("button", { class: "text", onclick: () => renderRenameSection(true) }, [t("room_rename_action")]) : null,
+      );
+      return;
+    }
+    const nameInput = h("input", { type: "text", value: titleTextEl.textContent ?? "" }) as HTMLInputElement;
+    mount(renameSection, h("div", { class: "row" }, [
+      nameInput,
+      h("button", { onclick: async () => {
+        const name = nameInput.value.trim();
+        if (!name) return;
+        if (await session.setRoomName(roomId, name)) titleTextEl.textContent = name;
+        renderRenameSection(false);
+      } }, [t("action_save")]),
+      h("button", { class: "text", onclick: () => renderRenameSection(false) }, [t("action_cancel")]),
+    ]));
+  };
+  renderRenameSection(false);
+  const title = h("div", { class: "row", style: "align-items:baseline;" }, [titleTextEl, renameSection]);
 
   const tabBar = h("div", { class: "row" }, [
     h("button", { class: tabState.active === "ideas" ? "" : "secondary", onclick: () => { tabState.active = "ideas"; void renderTab(); } }, [t("room_tab_ideas")]),
