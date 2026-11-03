@@ -153,7 +153,7 @@ export async function renderRoomView(
         voteBtn(1, t("room_upvote")),
         voteBtn(-1, t("room_downvote")),
         canEdit ? h("button", { class: "text", onclick: editForm }, [t("room_edit_idea")]) : null,
-        canEdit ? h("button", { class: "text", onclick: async () => {
+        canEdit ? h("button", { class: "destructive", onclick: async () => {
           if (!confirm(t("room_delete_idea_confirm_title"))) return;
           await session.deleteIdea(roomId, idea.id);
           await renderTab();
@@ -217,7 +217,7 @@ export async function renderRoomView(
       ]),
       h("div", { class: "row" }, [
         h("button", { class: "text", onclick: () => downloadIcs(event) }, [t("room_add_to_calendar")]),
-        event.canCancel ? h("button", { class: "text", onclick: async () => {
+        event.canCancel ? h("button", { class: "destructive", onclick: async () => {
           if (!confirm(t("room_cancel_event_confirm_title"))) return;
           await session.cancelEvent(roomId, event.id);
           await renderTab();
@@ -295,7 +295,7 @@ export async function renderRoomView(
       canPromote ? h("button", { class: "text", onclick: act(() => session.setRole(roomId, member.userKey, "admin")) }, [t("members_promote")]) : null,
       canDemote ? h("button", { class: "text", onclick: act(() => session.setRole(roomId, member.userKey, "member")) }, [t("members_demote")]) : null,
       canTransfer ? h("button", { class: "text", onclick: act(() => session.transferOwner(roomId, member.userKey)) }, [t("members_transfer_ownership")]) : null,
-      canKick ? h("button", { class: "text", onclick: act(() => session.kick(roomId, member.userKey)) }, [t("members_remove")]) : null,
+      canKick ? h("button", { class: "destructive", onclick: act(() => session.kick(roomId, member.userKey)) }, [t("members_remove")]) : null,
     ]);
   };
 

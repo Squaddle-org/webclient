@@ -16,7 +16,7 @@ export async function renderRoomsList(session: RoomSessionOrchestrator, navigate
     h("li", { class: "card" }, [
       h(
         "a",
-        { href: `/rooms/${roomIdToB32(room.roomId)}`, onclick: linkClick(() => navigate({ kind: "room", roomIdB32: roomIdToB32(room.roomId) })) },
+        { class: "title-medium", href: `/rooms/${roomIdToB32(room.roomId)}`, onclick: linkClick(() => navigate({ kind: "room", roomIdB32: roomIdToB32(room.roomId) })) },
         [room.displayName],
       ),
     ]);

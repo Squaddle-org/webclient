@@ -32,7 +32,7 @@ export async function renderIdeaDetail(session: RoomSessionOrchestrator, roomIdB
       const canDelete = isAdminOrOwner || bytesEqual(comment.author, myUserKey);
       return h("li", { class: "card row" }, [
         h("span", { class: "body-medium", style: "flex:1;" }, [comment.text]),
-        canDelete ? h("button", { class: "text", onclick: async () => {
+        canDelete ? h("button", { class: "destructive", onclick: async () => {
           await session.deleteComment(roomId, comment.id);
           await render();
         } }, [t("room_delete_comment")]) : null,
