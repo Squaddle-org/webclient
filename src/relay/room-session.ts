@@ -323,12 +323,20 @@ export class RoomSessionOrchestrator {
     return this.session.deleteComment(roomId, id);
   }
 
-  /** `"owner" | "admin" | "member" | "pending"`, or `null` if somehow not a member at all. */
+  /** `"owner" | "admin" | "member" | "pending"`, or `null` if somehow not a member at all. Pulls
+   * [roomId] fresh first, same reasoning as {@link listIdeas} - found live: on a cold room visit
+   * (nothing pulled yet this session), this read role-gated every button in room.ts (make-event,
+   * rename, edit/delete) off whatever stale/empty local membership state happened to exist, so
+   * e.g. "make this an event" only ever appeared after something else (visiting an idea, which
+   * does pull) had already synced the room once. */
   async myRole(roomId: Int8Array): Promise<string | null> {
+    await this.session.pull(roomId);
     return (await this.session.myRole(roomId)) ?? null;
   }
 
+  /** Pulls [roomId] fresh first, same reasoning as {@link myRole}. */
   async canCreateEvent(roomId: Int8Array): Promise<boolean> {
+    await this.session.pull(roomId);
     return this.session.canCreateEvent(roomId);
   }
 
@@ -387,7 +395,9 @@ export class RoomSessionOrchestrator {
     return (await this.session.roomName(roomId)) ?? null;
   }
 
+  /** Pulls [roomId] fresh first, same reasoning as {@link myRole}. */
   async canRenameRoom(roomId: Int8Array): Promise<boolean> {
+    await this.session.pull(roomId);
     return this.session.canRenameRoom(roomId);
   }
 
