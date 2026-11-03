@@ -9,6 +9,7 @@ import { renderOnboarding } from "./screens/onboarding";
 import { renderRoomsList } from "./screens/rooms-list";
 import { renderRoomView } from "./screens/room";
 import { renderIdeaDetail } from "./screens/idea-detail";
+import { renderRoomInvite } from "./screens/room-invite";
 import { renderJoin } from "./screens/join";
 import { renderSettings } from "./screens/settings";
 
@@ -75,6 +76,9 @@ export async function render(): Promise<void> {
         break;
       case "idea":
         mount(container, await renderIdeaDetail(session, route.roomIdB32, route.ideaIdB32, navigate));
+        break;
+      case "invite":
+        mount(container, await renderRoomInvite(session, route.roomIdB32, navigate));
         break;
       case "settings":
         mount(container, await renderSettings(session, identityStore, resetSession, navigate));

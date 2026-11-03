@@ -331,3 +331,39 @@ a.title-large:hover {
   text-align: center;
   font-weight: 700;
 }
+
+/* A plain icon-only trigger (the members-roster overlay button in room.ts) - round, no visible
+ * background until hovered/focused, same ≥40px touch target convention as .vote-control's own
+ * buttons. */
+.icon-button {
+  background: transparent;
+  border-radius: 50%;
+  padding: 8px;
+  min-width: 40px;
+  min-height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-on-surface-variant);
+}
+.icon-button:hover {
+  background: var(--color-surface-variant);
+}
+
+/* The members roster, shown as a native <dialog> overlay (room.ts) rather than a section that's
+ * always rendered inline - ::backdrop dims the page behind it, the panel itself reuses .card's
+ * surface/radius so it reads as the same kind of surface as everything else, just floating. */
+dialog {
+  border: none;
+  padding: 16px;
+  max-width: 480px;
+  width: calc(100% - 32px);
+  max-height: 80vh;
+  overflow-y: auto;
+  background: var(--color-surface-variant);
+  color: var(--color-on-surface-variant);
+  border-radius: var(--shape-large);
+}
+dialog::backdrop {
+  background: rgba(0, 0, 0, 0.5);
+}

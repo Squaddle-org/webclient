@@ -17,6 +17,7 @@ export type Route =
   | { kind: "rooms" }
   | { kind: "room"; roomIdB32: string }
   | { kind: "idea"; roomIdB32: string; ideaIdB32: string }
+  | { kind: "invite"; roomIdB32: string }
   | { kind: "settings" }
   /** [url] is the full URL (path + fragment) - handed to `parseInviteLink` as-is, so the secret
    * never gets re-encoded or round-tripped through anything else first. */
@@ -39,6 +40,9 @@ export function parseRoute(pathname: string, href: string): Route {
   const ideaMatch = /^rooms\/([^/]+)\/ideas\/([^/]+)$/.exec(trimmed);
   if (ideaMatch) return { kind: "idea", roomIdB32: ideaMatch[1]!, ideaIdB32: ideaMatch[2]! };
 
+  const inviteMatch = /^rooms\/([^/]+)\/invite$/.exec(trimmed);
+  if (inviteMatch) return { kind: "invite", roomIdB32: inviteMatch[1]! };
+
   return { kind: "rooms" };
 }
 
@@ -54,6 +58,8 @@ export function routeToPath(route: Route): string {
       return `/rooms/${route.roomIdB32}`;
     case "idea":
       return `/rooms/${route.roomIdB32}/ideas/${route.ideaIdB32}`;
+    case "invite":
+      return `/rooms/${route.roomIdB32}/invite`;
     case "settings":
       return "/settings";
     case "join":

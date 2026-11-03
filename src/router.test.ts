@@ -7,7 +7,7 @@ describe("parseRoute", () => {
     expect(parseRoute("", "https://client.squaddle.org/")).toEqual({ kind: "onboarding" });
   });
 
-  it("parses rooms, room, and idea routes", () => {
+  it("parses rooms, room, idea, and invite routes", () => {
     expect(parseRoute("/rooms", "https://client.squaddle.org/rooms")).toEqual({ kind: "rooms" });
     expect(parseRoute("/rooms/ABC123", "https://client.squaddle.org/rooms/ABC123")).toEqual({ kind: "room", roomIdB32: "ABC123" });
     expect(parseRoute("/rooms/ABC123/ideas/XYZ789", "https://client.squaddle.org/rooms/ABC123/ideas/XYZ789")).toEqual({
@@ -15,6 +15,7 @@ describe("parseRoute", () => {
       roomIdB32: "ABC123",
       ideaIdB32: "XYZ789",
     });
+    expect(parseRoute("/rooms/ABC123/invite", "https://client.squaddle.org/rooms/ABC123/invite")).toEqual({ kind: "invite", roomIdB32: "ABC123" });
   });
 
   it("treats a /j/ path as a join route carrying the full href (fragment included)", () => {
@@ -28,9 +29,10 @@ describe("parseRoute", () => {
 });
 
 describe("routeToPath", () => {
-  it("round-trips room and idea routes", () => {
+  it("round-trips room, idea, and invite routes", () => {
     expect(routeToPath({ kind: "room", roomIdB32: "ABC123" })).toBe("/rooms/ABC123");
     expect(routeToPath({ kind: "idea", roomIdB32: "ABC123", ideaIdB32: "XYZ789" })).toBe("/rooms/ABC123/ideas/XYZ789");
+    expect(routeToPath({ kind: "invite", roomIdB32: "ABC123" })).toBe("/rooms/ABC123/invite");
     expect(routeToPath({ kind: "rooms" })).toBe("/rooms");
     expect(routeToPath({ kind: "onboarding" })).toBe("/onboarding");
   });

@@ -85,15 +85,34 @@ export async function renderRoomView(
     ]));
   };
   renderRenameSection(false);
-  const title = h("div", { class: "row", style: "align-items:baseline;" }, [titleTextEl, renameSection]);
+
+  // Members dialog - a native <dialog> overlay (user-reported: the roster shouldn't sit
+  // permanently below ideas/events) triggered by the icon button below, rather than a section
+  // that's always rendered inline.
+  const membersDialogContent = h("div", {});
+  const membersDialog = h("dialog", { class: "card" }, [
+    h("div", { class: "row", style: "justify-content:space-between;" }, [
+      h("h2", {}, [t("members_title")]),
+      h("button", { class: "text", onclick: () => membersDialog.close() }, [t("action_close")]),
+    ]),
+    membersDialogContent,
+  ]);
+  membersDialog.addEventListener("click", (ev) => {
+    if (ev.target === membersDialog) membersDialog.close(); // backdrop click
+  });
+
+  const title = h("div", { class: "row", style: "align-items:baseline;" }, [
+    titleTextEl,
+    renameSection,
+    h("a", { href: `/rooms/${roomIdB32}/invite`, onclick: linkClick(() => navigate({ kind: "invite", roomIdB32 })) }, [t("room_invite_action")]),
+    h("button", { class: "icon-button", "aria-label": t("members_title"), onclick: () => membersDialog.showModal() }, [icon("group")]),
+  ]);
 
   const tabBar = h("div", { class: "row" }, [
     h("button", { class: tabState.active === "ideas" ? "" : "secondary", onclick: () => { tabState.active = "ideas"; void renderTab(); } }, [t("room_tab_ideas")]),
     h("button", { class: tabState.active === "events" ? "" : "secondary", onclick: () => { tabState.active = "events"; void renderTab(); } }, [t("room_tab_events")]),
   ]);
   const tabContent = h("div", { class: "tab-content" });
-  const membersSection = h("div", { class: "members-section" });
-  const inviteSection = h("div", { class: "invite-section" });
   const error = h("p", { class: "error" });
 
   // ---- Ideas tab ----
@@ -255,7 +274,7 @@ export async function renderRoomView(
   const renderTab = async (): Promise<void> => {
     if (tabState.active === "ideas") await renderIdeasTab();
     else await renderEventsTab();
-    mount(container, header, title, tabBar, tabContent, membersSection, inviteSection, error);
+    mount(container, header, title, tabBar, tabContent, error, membersDialog);
   };
 
   // ---- Members ----
@@ -291,44 +310,9 @@ export async function renderRoomView(
 
   const refreshMembers = async (): Promise<void> => {
     const members = await session.listMembers(roomId);
-    mount(membersSection, h("h2", {}, [t("members_title")]), h("ul", { class: "list" }, members.map(memberRow)));
+    mount(membersDialogContent, h("ul", { class: "list" }, members.map(memberRow)));
   };
 
-  // ---- Invite ----
-
-  const renderInvite = (): void => {
-    const requireApprovalInput = h("input", { type: "checkbox" }) as HTMLInputElement;
-    const maxUsesInput = h("input", { type: "number", min: "1", placeholder: t("invite_max_uses_label") }) as HTMLInputElement;
-    const expirySelect = h("select", {}, [
-      h("option", { value: "" }, [t("invite_expiry_never")]),
-      h("option", { value: "86400" }, [t("invite_expiry_1_day")]),
-      h("option", { value: "604800" }, [t("invite_expiry_7_days")]),
-      h("option", { value: "2592000" }, [t("invite_expiry_30_days")]),
-    ]) as HTMLSelectElement;
-    const resultInput = h("input", { type: "text", readonly: "true" }) as HTMLInputElement;
-
-    mount(
-      inviteSection,
-      h("h2", {}, [t("invite_title")]),
-      h("label", { class: "row" }, [requireApprovalInput, ` ${t("invite_require_approval")}`]),
-      h("p", { class: "body-small" }, [t("invite_require_approval_explainer")]),
-      h("label", {}, [`${t("invite_expires")} `, expirySelect]),
-      h("label", {}, [maxUsesInput]),
-      h("button", {
-        onclick: async () => {
-          const expiresInSeconds = expirySelect.value ? Number(expirySelect.value) : null;
-          const expiresAt = expiresInSeconds ? Math.floor(Date.now() / 1000) + expiresInSeconds : null;
-          const maxUses = maxUsesInput.value ? Number(maxUsesInput.value) : null;
-          const invite = await session.createInvite(roomId, requireApprovalInput.checked, expiresAt, maxUses);
-          if (invite) resultInput.value = invite.url;
-          else error.textContent = t("invite_error_title");
-        },
-      }, [t("invite_create")]),
-      resultInput,
-    );
-  };
-
-  renderInvite();
   await refreshMembers();
   await renderTab();
 
