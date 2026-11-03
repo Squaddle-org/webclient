@@ -349,6 +349,16 @@ a.title-large:hover {
 .icon-button:hover {
   background: var(--color-surface-variant);
 }
+/* button.destructive's own background/color (higher specificity than .icon-button alone) would
+ * otherwise win and permanently fill the circle red - an icon button only needs its glyph tinted,
+ * same as .vote-control's own colored-icon-on-neutral-pill treatment, not a solid red fill. */
+.icon-button.destructive {
+  background: transparent;
+  color: var(--color-error);
+}
+.icon-button.destructive:hover {
+  background: var(--color-error-container);
+}
 
 /* The members roster, shown as a native <dialog> overlay (room.ts) rather than a section that's
  * always rendered inline - ::backdrop dims the page behind it, the panel itself reuses .card's

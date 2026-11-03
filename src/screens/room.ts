@@ -160,14 +160,16 @@ export async function renderRoomView(
         ]),
         voteControl(),
       ]),
-      h("div", { class: "row" }, [
-        canEdit ? h("button", { class: "text", onclick: editForm }, [t("room_edit_idea")]) : null,
-        canEdit ? h("button", { class: "destructive", onclick: async () => {
-          if (!confirm(t("room_delete_idea_confirm_title"))) return;
-          await session.deleteIdea(roomId, idea.id);
-          await renderTab();
-        } }, [t("room_delete_idea")]) : null,
+      h("div", { class: "row", style: "justify-content:space-between;" }, [
         (isAdminOrOwner || myRole === "member") ? h("button", { class: "text", onclick: () => makeEventForm(idea) }, [t("room_make_this_an_event")]) : null,
+        h("div", { class: "row" }, [
+          canEdit ? h("button", { class: "icon-button", "aria-label": t("room_edit_idea"), onclick: editForm }, [icon("pencil")]) : null,
+          canEdit ? h("button", { class: "icon-button destructive", "aria-label": t("room_delete_idea"), onclick: async () => {
+            if (!confirm(t("room_delete_idea_confirm_title"))) return;
+            await session.deleteIdea(roomId, idea.id);
+            await renderTab();
+          } }, [icon("trash")]) : null,
+        ]),
       ]),
     ]);
   };
