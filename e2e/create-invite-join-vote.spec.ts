@@ -16,9 +16,10 @@ import { RELAY_HOST } from "./global-setup";
 
 async function createIdentity(page: Page, deviceLabel: string): Promise<void> {
   await page.getByRole("button", { name: "Create a new identity" }).click();
-  await page.getByLabel("Display name").fill(deviceLabel);
   await page.getByRole("button", { name: "Create", exact: true }).click();
   await page.getByLabel("I wrote it down").check();
+  await page.getByRole("button", { name: "Continue" }).click();
+  await page.getByPlaceholder("Display name").fill(deviceLabel);
   await page.getByRole("button", { name: "Continue" }).click();
 }
 
