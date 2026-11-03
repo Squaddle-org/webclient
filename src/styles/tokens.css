@@ -292,3 +292,42 @@ a.title-large:hover {
   font-weight: 500;
   padding: 2px 10px;
 }
+
+/* Idea vote control - one pill (android's VoteControl, RoomScreen.kt): up-arrow, count, down-arrow,
+ * tinted to the primary/error container the moment this device's own vote is up/down, so "did I
+ * already vote" is answerable at a glance without reading the arrow color. */
+.vote-control {
+  display: inline-flex;
+  align-items: center;
+  border-radius: var(--shape-extra-large);
+  background: var(--color-surface-variant);
+  flex-shrink: 0;
+}
+.vote-control.voted-up {
+  background: var(--color-primary-container);
+}
+.vote-control.voted-down {
+  background: var(--color-error-container);
+}
+.vote-control button {
+  background: transparent;
+  border-radius: 50%;
+  padding: 8px;
+  min-width: 40px;
+  min-height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-on-surface-variant);
+}
+.vote-control.voted-up .vote-up {
+  color: var(--color-primary);
+}
+.vote-control.voted-down .vote-down {
+  color: var(--color-error);
+}
+.vote-control .vote-score {
+  min-width: 20px;
+  text-align: center;
+  font-weight: 700;
+}

@@ -131,6 +131,41 @@ export async function renderSettings(session: RoomSessionOrchestrator, identityS
   };
   renderProfileSection();
 
+  // Voucher redemption is per-room (relay's /v1/entitlements takes a room id), so unlike every
+  // other section here it needs a room to act on - moved here from the room screen (user-
+  // reported: redeeming shouldn't live on the room page at all), listing every known room with
+  // its current tier so the tier label ("Kostenlos" etc.) is visible globally, not just while
+  // inside one specific room.
+  const voucherSection = h("div", {});
+  const renderVoucherSection = async (): Promise<void> => {
+    const known = await session.listKnownRooms();
+    const rows = await Promise.all(known.map(async (room) => {
+      const limits = await session.getLimits(room.roomId);
+      const codeInput = h("input", { type: "text", placeholder: t("voucher_code_label") }) as HTMLInputElement;
+      const rowError = h("p", { class: "error" });
+      return h("li", { class: "card" }, [
+        h("div", { class: "row", style: "justify-content:space-between;" }, [
+          h("span", {}, [room.displayName]),
+          limits ? h("span", { class: "pill" }, [t(`tier_${limits.tier}`)]) : null,
+        ]),
+        h("div", { class: "row" }, [
+          codeInput,
+          h("button", { class: "text", onclick: async () => {
+            const result = await session.redeemVoucher(room.roomId, codeInput.value.trim());
+            if (!result.tier) {
+              rowError.textContent = result.message ?? t("voucher_error_title");
+              return;
+            }
+            await renderVoucherSection();
+          } }, [t("room_redeem_voucher")]),
+        ]),
+        rowError,
+      ]);
+    }));
+    mount(voucherSection, h("h2", {}, [t("room_redeem_voucher")]), h("ul", { class: "list" }, rows));
+  };
+  void renderVoucherSection();
+
   const relaySection = h("div", {});
   const renderRelaySection = (): void => {
     const hostInput = h("input", { type: "text", value: getRelayHost() }) as HTMLInputElement;
@@ -224,6 +259,7 @@ export async function renderSettings(session: RoomSessionOrchestrator, identityS
     profileSection,
     relaySection,
     pushSection,
+    voucherSection,
     linkDeviceSection,
     seedSection,
     backupSection,

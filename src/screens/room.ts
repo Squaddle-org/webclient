@@ -4,6 +4,7 @@ import { b32ToRoomId, bytesEqual, roomIdToB32 } from "../bytes";
 import { linkClick, type Navigate } from "../navigation";
 import { renderAvatar } from "../components/avatar";
 import { renderEmptyState } from "../components/empty-state";
+import { icon } from "../components/icon";
 import { getMyUserKey } from "../session-context";
 import { downloadIcs } from "../room/ics";
 import type { Event, Idea, LiveUpdatesSubscription, Member, RoomSessionOrchestrator } from "../relay/room-session";
@@ -49,25 +50,6 @@ export async function renderRoomView(
   const isAdminOrOwner = myRole === "owner" || myRole === "admin";
   const isOwner = myRole === "owner";
   const limits = await session.getLimits(roomId);
-
-  const voucherSection = h("div", { class: "voucher-section" });
-  const voucherError = h("p", { class: "error" });
-  const renderVoucher = (): void => {
-    const codeInput = h("input", { type: "text", placeholder: t("voucher_code_label") }) as HTMLInputElement;
-    mount(voucherSection, h("div", { class: "row" }, [
-      codeInput,
-      h("button", { class: "text", onclick: async () => {
-        const result = await session.redeemVoucher(roomId, codeInput.value.trim());
-        if (!result.tier) {
-          voucherError.textContent = result.message ?? t("voucher_error_title");
-          return;
-        }
-        voucherError.textContent = "";
-        await renderTab();
-      } }, [t("room_redeem_voucher")]),
-    ]), voucherError);
-  };
-  renderVoucher();
 
   const header = h("div", { class: "row", style: "justify-content:space-between;align-items:baseline;" }, [
     h("a", { href: "/rooms", onclick: linkClick(() => navigate({ kind: "rooms" })) }, [`← ${t("rooms_title")}`]),
@@ -119,14 +101,22 @@ export async function renderRoomView(
   const ideaRow = (idea: Idea): HTMLElement => {
     const ideaIdB32 = roomIdToB32(idea.id);
     const canEdit = isAdminOrOwner || bytesEqual(idea.createdBy, myUserKey);
-    const voteBtn = (direction: 1 | -1, label: string): HTMLElement =>
-      h("button", {
-        class: idea.myVote === direction ? "" : "secondary",
-        onclick: async () => {
-          await session.vote(roomId, idea.id, idea.myVote === direction ? 0 : direction);
-          await renderTab();
-        },
-      }, [label]);
+
+    // Mirrors android's VoteControl (RoomScreen.kt) exactly: one pill, up-arrow/count/down-arrow,
+    // tinted to the primary/error container the moment this device's own vote is up/down - not
+    // two separate text buttons plus a floating score badge.
+    const voteControl = (): HTMLElement => {
+      const stateClass = idea.myVote === 1 ? "voted-up" : idea.myVote === -1 ? "voted-down" : "";
+      const vote = async (direction: 1 | -1): Promise<void> => {
+        await session.vote(roomId, idea.id, idea.myVote === direction ? 0 : direction);
+        await renderTab();
+      };
+      return h("div", { class: `vote-control ${stateClass}` }, [
+        h("button", { class: "vote-up", "aria-label": t("room_upvote"), onclick: () => void vote(1) }, [icon("chevron-up")]),
+        h("span", { class: "vote-score", "aria-label": `score ${String(idea.score)}` }, [String(idea.score)]),
+        h("button", { class: "vote-down", "aria-label": t("room_downvote"), onclick: () => void vote(-1) }, [icon("chevron-down")]),
+      ]);
+    };
 
     const editForm = (): void => {
       const editTitle = h("input", { type: "text", value: idea.title }) as HTMLInputElement;
@@ -144,14 +134,14 @@ export async function renderRoomView(
     };
 
     return h("li", { class: "card", "data-idea": ideaIdB32 }, [
-      h("div", { class: "row", style: "justify-content:space-between;" }, [
-        h("a", { class: "title-medium", href: `/rooms/${roomIdB32}/ideas/${ideaIdB32}`, onclick: linkClick(() => navigate({ kind: "idea", roomIdB32, ideaIdB32 })) }, [idea.title]),
-        h("span", { class: "pill", "aria-label": `score ${String(idea.score)}` }, [String(idea.score)]),
+      h("div", { class: "row", style: "justify-content:space-between;align-items:flex-start;" }, [
+        h("div", {}, [
+          h("a", { class: "title-medium", href: `/rooms/${roomIdB32}/ideas/${ideaIdB32}`, onclick: linkClick(() => navigate({ kind: "idea", roomIdB32, ideaIdB32 })) }, [idea.title]),
+          idea.desc ? h("p", { class: "body-medium" }, [idea.desc]) : null,
+        ]),
+        voteControl(),
       ]),
-      idea.desc ? h("p", { class: "body-medium" }, [idea.desc]) : null,
       h("div", { class: "row" }, [
-        voteBtn(1, t("room_upvote")),
-        voteBtn(-1, t("room_downvote")),
         canEdit ? h("button", { class: "text", onclick: editForm }, [t("room_edit_idea")]) : null,
         canEdit ? h("button", { class: "destructive", onclick: async () => {
           if (!confirm(t("room_delete_idea_confirm_title"))) return;
@@ -265,7 +255,7 @@ export async function renderRoomView(
   const renderTab = async (): Promise<void> => {
     if (tabState.active === "ideas") await renderIdeasTab();
     else await renderEventsTab();
-    mount(container, header, title, voucherSection, tabBar, tabContent, membersSection, inviteSection, error);
+    mount(container, header, title, tabBar, tabContent, membersSection, inviteSection, error);
   };
 
   // ---- Members ----
